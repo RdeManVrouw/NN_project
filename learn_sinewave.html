@@ -1,0 +1,477 @@
+<!DOCTYPE html>
+<html>
+<style>
+  .text_input {
+    position: absolute;
+    left: 50%;
+    font-family: monospace;
+    border: 2px solid gray;
+  }
+  .button_input {
+    background-color: lightgray;
+    font-family: monospace;
+  }
+</style>
+<body>
+  <canvas id="map" style="position:absolute;left:10px;top:10px" width="400" height="200" onclick="exportAsPNG(false, 'plot')"></canvas>
+  <canvas id="map2" style="position:absolute;left:10px;top:220px" width="400" height="300" onclick="exportAsPNG(true, 'neuralnet')"></canvas>
+  <div style="position:absolute;left:420px;top:10px;width:400px;height:140px;background-color:lightgray" spellcheck="false">
+    window size/num. inputs <input id="input_0" class="text_input" type="text" value="18"><br>
+    hidden layers <input id="input_1" class="text_input" type="text" value="10, 10"><br>
+    activation functions <input id="input_2" class="text_input" type="text" value="tanh, tanh, tanh"><br>
+    <button class="button_input" onclick="import_NN_click()">import NN</button><input id="import_NN" type="file" style="background-color:gray;visibility:hidden"><br>
+    <button class="button_input" onclick="export_NN_click()">export NN</button>
+    <p id="model_information">number of parameters: 311</p>
+    <button class="button_input" style="position:absolute;bottom:0px;right:0px" onclick="apply_settings0()">apply settings</button>
+  </div>
+  <div style="position:absolute;left:420px;top:160px;width:400px;height:360px;background-color:lightgray">
+    learning rate <input id="input_3" class="text_input" type="text" value="-0.01"><br>
+    wavelength range <input id="input_4" class="text_input" type="text" value="60"><br>
+    future steps <input id="input_5" class="text_input" type="text" value="1"><br>
+    batch size <input id="input_6" class="text_input" type="text" value="10"><br>
+    <button id="train" class="button_input" onclick="train_click()" style="background-color:lightgray">train</button>
+    <button id="predict" class="button_input" onclick="predict_click()" style="background-color:lightgray">predict wave</button>
+    <p id="hyper_information"></p>
+    <button class="button_input" style="position:absolute;bottom:0px;right:0px" onclick="apply_settings1()">apply settings</button>
+  </div>
+  <script src="neuralnet.js"></script>
+  <script src="neuronnet.js"></script>
+<script>
+var canvas = document.getElementById("map");
+var ctx = canvas.getContext("2d");
+var canvas2 = document.getElementById("map2");
+var ctx2 = canvas2.getContext("2d");
+
+Math.range = function (a, b){
+  return a + Math.random() * (b - a);
+}
+class Read {
+  static accept(str, f){
+    var item = new Item(), index = new Item();
+    if (Read["accept" + f](str, index, item) && index.i == str.length) return item.i;
+    return null;
+  }
+
+  static acceptNatural(str, index){
+    if (str.charCodeAt(index.i) >= 49 && str.charCodeAt(index.i) <= 57){
+      index.i++;
+      return true;
+    }
+    return false;
+  }
+  static acceptZero(str, index){
+    if (str[index.i] == '0'){
+      index.i++;
+      return true;
+    }
+    return false;
+  }
+  static acceptDigit(str, index){
+    return Read.acceptZero(str, index) || Read.acceptNatural(str, index);
+  }
+  static acceptInteger(str, index, item){
+    var sign = 1;
+    if (str[index.i] == '-'){
+      sign = -1;
+      index.i++;
+    }
+    if (Read.acceptNatural(str, index)){
+      var sum = str.charCodeAt(index.i - 1) - 48;
+      while (Read.acceptDigit(str, index)){
+        sum = 10 * sum + str.charCodeAt(index.i - 1) - 48;
+      }
+      item.i = sum * sign;
+      item.type = 2;
+      return true;
+    }
+    if (Read.acceptZero(str, index)){
+      item.i = 0;
+      item.type = 2;
+      return true;
+    }
+    if (sign == -1) index.i--;
+    return false;
+  }
+  static acceptFloat(str, index, item){
+    var temp = index.i;
+    var sign = 1;
+    if (str[index.i] == '-'){
+      sign = -1;
+      index.i++;
+    }
+    if (Read.acceptInteger(str, index, item) && str[index.i] == '.'){
+      index.i++;
+      var mult = 0.1;
+      while (Read.acceptDigit(str, index)){
+        item.i += mult * (str.charCodeAt(index.i - 1) - 48);
+        mult /= 10;
+      }
+      item.i *= sign;
+      return true;
+    }
+    index.i = temp;
+    return false;
+  }
+  static acceptNumber(str, index, item){
+    while (str[index.i] == ' ') index.i++;
+    return Read.acceptFloat(str, index, item) || Read.acceptInteger(str, index, item);
+  }
+
+  static acceptComma(str, index){
+    var temp = index.i;
+    while (str[index.i] == ' ') index.i++;
+    if (str[index.i] == ','){
+      index.i++;
+      return true;
+    }
+    index.i = temp;
+    return false;
+  }
+  static acceptString(str, index, item){
+    var temp = index.i;
+    while (str[index.i] == ' ') index.i++;
+    var start = index.i;
+    if ((str.charCodeAt(index.i) >= 97 && str.charCodeAt(index.i) <= 122) || str[index.i] == '_'){
+      while ((str.charCodeAt(index.i) >= 97 && str.charCodeAt(index.i) <= 122) || str[index.i] == '_'){
+        index.i++;
+        if (index.i == str.length) break;
+      }
+      item.i = str.substr(start, index.i - start);
+      return true;
+    }
+    index.i = temp;
+    return false;
+  }
+  static acceptStringArray(str, index, item){
+    var temp = index.i;
+    var string = new Item();
+    if (Read.acceptString(str, index, string)){
+      item.i = [string.i];
+      while (Read.acceptComma(str, index)){
+        if (Read.acceptString(str, index, string)){
+          item.i.push(string.i);
+        } else {
+          index.i = temp;
+          return false;
+        }
+      }
+      return true;
+    }
+    index.i = temp;
+    return false;
+  }
+  static acceptNumberArray(str, index, item){
+    var temp = index.i;
+    var number = new Item();
+    if (Read.acceptNumber(str, index, number)){
+      item.i = [number.i];
+      while (Read.acceptComma(str, index)){
+        if (Read.acceptNumber(str, index, number)){
+          item.i.push(number.i);
+        } else {
+          index.i = temp;
+          return false;
+        }
+      }
+      return true;
+    }
+    index.i = temp;
+    return false;
+  }
+
+  static acceptRange(str, index, item){
+    var temp = index.i;
+    if (Read.acceptNumber(str, index, item)){
+      item.i = [item.i, item.i];
+      return true;
+    }
+    while (str[index.i] == ' ') index.i++;
+    if (str[index.i] == '['){
+      index.i++;
+      if (Read.acceptNumberArray(str, index, item)){
+        while (str[index.i] == ' ') index.i++;
+        if (item.i.length == 2 && str[index.i] == ']'){
+          index.i++;
+          return true;
+        }
+      }
+      index.i = temp;
+      return false;
+    }
+    index.i = temp;
+    return false;
+  }
+}
+class Item {
+  constructor(i = 0){
+    this.i = i;
+  }
+}
+
+class Wave {
+  constructor(x, freq){
+    this.x = x;
+    this.freq = freq;
+  }
+
+  next(){
+    return 0.5 * Math.sin((this.x++) * this.freq);
+  }
+}
+
+function Vector2ToPxl(v){
+  return new Vector2(Math.round((v.x - Xmin)/(Xmax - Xmin)*(canvas.width - 1)), Math.round((v.y - Ymax)/(Ymin - Ymax)*(canvas.height - 1)));
+}
+function Vector2FromPxl(x, y){
+  return new Vector2(x/(canvas.width-1)*(Xmax - Xmin)+Xmin, y/(canvas.height-1)*(Ymin - Ymax)+Ymax);
+}
+function circle(m, r, color = "black"){
+  ctx.beginPath();
+  ctx.fillStyle = color;
+  ctx.arc(Math.round((m.x - Xmin)/(Xmax - Xmin)*(canvas.width - 1)), Math.round((m.y - Ymax)/(Ymin - Ymax)*(canvas.height - 1)), r / (Xmax - Xmin) * canvas.width, 0, 2 * Math.PI);
+  ctx.fill();
+}
+
+var is_properly_setup = true;
+var applied = [];
+for (var i = 0; i < document.getElementsByClassName("text_input").length; i++){
+  applied[i] = true;
+  document.getElementById("input_" + i).addEventListener("input", function () {
+    var index = this.id.substring(6) * 1;
+    applied[index] = false;
+    this.style.color = "red";
+  });
+}
+
+var subpoints = 18;
+var learning_rate = -0.01;
+var wavelength_range = [60, 60];
+var num_future_steps = 1;
+var batchSize = 10;
+var child = new NeuronModel(subpoints);
+child.addLayer(10, "tanh");
+child.addLayer(10, "tanh");
+child.addLayer(1, "tanh");
+var dataplot = new Dataplotter(0, 0, 400, 200);
+var continues = new MultyContinuesDataPlotter(2, 360, 0, 0, 400, 200, ["navy", "gray"]);
+child.draw(ctx2, 0, 0, 400, 300);
+
+function getData(dim = subpoints){
+  var waveLength = Math.range(wavelength_range[0], wavelength_range[1]);
+  var x = Math.random() * waveLength;
+  var freq = 2 * Math.PI / waveLength;
+  var input = [];
+  for (var i = 0; i < dim; i++) input.push(0.5 * Math.sin((x++) * freq) + Math.range(-0.2, 0.2));
+  return [input, new Wave(x, freq)];
+}
+
+var lastDrawn;
+function loop(){
+  if (state != 1) return;
+  let alpha = learning_rate / batchSize;
+  for (var generation = 0; generation < 10; generation++){
+    var cost = 0;
+    for (var batch = 0; batch < batchSize; batch++){
+      var data = getData(subpoints);
+      var wave = data[1];
+      data = data[0];
+      for (var i = 0; i < num_future_steps; i++){
+        cost += child.Evaluate(data, [wave.next()], alpha);
+        data.push(child.output()[0]);
+        data.shift();
+      }
+    }
+    child.learnFromYourMistakes();
+    dataplot.Push(cost / (batchSize * num_future_steps));
+  }
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  dataplot.draw(ctx);
+  lastDrawn = 0;
+  child.draw(ctx2, 0, 0, 400, 300);
+  if (state == 1) setTimeout(function () { loop(); }, 10);
+}
+function sine_loop(data, wave){
+  if (state != 2) return;
+  child.predict(data);
+  var prediction = child.output()[0];
+  data.push(prediction);
+  data.shift();
+  continues.Push([prediction, wave.next()]);
+  continues.draw(ctx);
+  lastDrawn = 1;
+  child.draw(ctx2, 0, 0, 400, 300);
+  if (state == 2) setTimeout(function () {
+    sine_loop(data, wave);
+  }, 10);
+}
+
+function apply_settings0(){
+  subpoints = Read.accept(document.getElementById("input_0").value, "Number");
+  var layer_lengths = Read.accept(document.getElementById("input_1").value, "NumberArray");
+  var layer_functions = Read.accept(document.getElementById("input_2").value, "StringArray");
+  if (document.getElementById("input_1").value == "") layer_lengths = [];
+  is_properly_setup = false;
+  if (layer_lengths == null || layer_functions == null){
+    alert("syntax error");
+    return;
+  }
+  if (layer_lengths.length + 1 != layer_functions.length){
+    alert("The number of activation functions has to be one more than the number of hidden layers");
+    return;
+  }
+  is_properly_setup = true;
+  child = new NeuronModel(subpoints);
+  for (var i = 0; i < layer_lengths.length; i++) child.addLayer(layer_lengths[i], layer_functions[i]);
+  child.addLayer(1, layer_functions[layer_functions.length - 1]);
+  document.getElementById("model_information").innerHTML = "number of parameters: " + child.numParameters();
+  dataplot.Clear();
+  continues.Clear();
+  child.draw(ctx2, 0, 0, 400, 300);
+  state = 0;
+  document.getElementById("train").style.backgroundColor = "lightgray";
+  document.getElementById("predict").style.backgroundColor = "lightgray";
+  for (var i = 0; i < 3; i++){
+    applied[i] = true;
+    document.getElementById("input_" + i).style.color = "black";
+  }
+}
+function apply_settings1(){
+  learning_rate = Read.accept(document.getElementById("input_3").value, "Number");
+  wavelength_range = Read.accept(document.getElementById("input_4").value, "Range");
+  num_future_steps = Read.accept(document.getElementById("input_5").value, "Number");
+  batchSize = Read.accept(document.getElementById("input_6").value, "Number");
+  is_properly_setup = false;
+  if (learning_rate == null || wavelength_range == null || num_future_steps == null){
+    alert("syntax error");
+    return;
+  }
+  is_properly_setup = true;
+  dataplot.Clear();
+  continues.Clear();
+  state = 0;
+  document.getElementById("train").style.backgroundColor = "lightgray";
+  document.getElementById("predict").style.backgroundColor = "lightgray";
+  for (var i = 3; i < applied.length; i++){
+    applied[i] = true;
+    document.getElementById("input_" + i).style.color = "black";
+  }
+}
+
+function exportAsTXT(text, filename = "test"){
+  let textFileAsBlob = new Blob([text], { type: "text/plain" });
+  let downloadLink = document.createElement('a');
+  downloadLink.download = filename + ".txt";
+  downloadLink.innerHTML = 'Download File';
+
+  if (window.webkitURL != null) {
+    downloadLink.href = window.webkitURL.createObjectURL(textFileAsBlob);
+  } else {
+    downloadLink.href = window.URL.createObjectURL(textFileAsBlob);
+    downloadLink.style.display = 'none';
+    document.body.appendChild(downloadLink);
+  }
+  downloadLink.click();
+}
+function exportAsPNG(isNN, fileName){
+  var canv = document.createElement("canvas");
+  canv.width = 800;
+  if (isNN){
+    canv.height = 600;
+  } else {
+    canv.height = 400;
+  }
+  document.body.appendChild(canv);
+  var context = canv.getContext("2d");
+  if (isNN){
+    child.draw(context, 0, 0, 800, 600);
+  } else {
+    if (lastDrawn == 0){
+      var temp = new Dataplotter(0, 0, 800, 400);
+      temp.Xstep = dataplot.Xstep;
+      temp.Xmin = dataplot.Xmin;
+      temp.Xmax = dataplot.Xmax;
+      temp.Ymin = dataplot.Ymin;
+      temp.Ymax = dataplot.Ymax;
+      temp.data = dataplot.data;
+      temp.lastDataPoint = dataplot.lastDataPoint;
+      temp.cycle = dataplot.cycle;
+      temp.draw(context);
+    } else {
+      var temp = new MultyContinuesDataPlotter(2, continues.max_dim, 0, 0, 800, 400, ["navy", "gray"]);
+      temp.Ymin = continues.Ymin;
+      temp.Ymax = continues.Ymax;
+      temp.data = continues.data;
+      temp.draw(context);
+    }
+  }
+  var img = document.createElement('a');
+  img.href = canv.toDataURL("image/png");;
+  img.download = fileName;
+  img.click();
+  document.body.removeChild(canv);
+}
+function import_NN_click(){
+  document.getElementById("import_NN").style.visibility = "visible";
+}
+function export_NN_click(){
+  exportAsTXT(child.writeText(), "NN_sinewave_model");
+}
+document.getElementById("import_NN").addEventListener('change', function() {
+  let fr = new FileReader();
+  fr.onload = function () {
+    child = NeuronModel.readText(fr.result);
+    document.getElementById("input_0").value = child.layer0.length;
+    var hidden = child.layers[0].neurons.length;
+    for (var i = 1; i < child.layers.length - 1; i++) hidden += ", " + child.layers[i].neurons.length;
+    document.getElementById("input_1").value = hidden;
+    var activation_functions = child.layers[0].activation_function;
+    for (var i = 1; i < child.layers.length; i++) activation_functions += ", " + child.layers[i].activation_function;
+    document.getElementById("input_2").value = activation_functions;
+    document.getElementById("model_information").innerHTML = "number of parameters: " + child.numParameters();
+    child.draw(ctx2, 0, 0, 400, 300);
+    document.getElementById("import_NN").style.visibility = "hidden";
+    document.getElementById("import_NN").value = '';
+  }
+  fr.readAsText(this.files[0]);
+});
+
+canvas.addEventListener("mousemove", function (e) {
+  if (lastDrawn == 0 && e.pageX >= 20 && e.pageX <= 400 && e.pageY >= 20 && e.pageY <= 200){
+    let index = Math.floor((e.pageX - 20) * (dataplot.Xmax - dataplot.Xmin) / (dataplot.pxlW * dataplot.Xstep) + dataplot.Xmin / dataplot.Xstep);
+    let value = (index >= dataplot.data.length) ? dataplot.lastDataPoint : dataplot.data[index];
+    dataplot.draw(ctx);
+    ctx.beginPath();
+    ctx.fillStyle = "blue";
+    ctx.arc((index * dataplot.Xstep - dataplot.Xmin) / (dataplot.Xmax - dataplot.Xmin) * dataplot.pxlW + 10, (value - dataplot.Ymax) / (dataplot.Ymin - dataplot.Ymax) * dataplot.pxlH + 10, 3, 0, 2 * Math.PI);
+    ctx.fill();
+    document.getElementById("hyper_information").innerHTML = "cost: " + value;
+  }
+});
+canvas.addEventListener("mouseleave", function () {
+  if (lastDrawn == 0) dataplot.draw(ctx);
+  document.getElementById("hyper_information").innerHTML = "";
+});
+
+var state = 0;
+function train_click(){
+  if (!is_properly_setup) return;
+  state = (state == 1) ? 0 : 1;
+  document.getElementById("train").style.backgroundColor = (state == 1) ? "darkgray" : "lightgray";
+  document.getElementById("predict").style.backgroundColor = (state == 2) ? "darkgray" : "lightgray";
+  if (state == 1) loop();
+}
+function predict_click(){
+  if (!is_properly_setup) return;
+  state = (state == 2) ? 0 : 2;
+  document.getElementById("train").style.backgroundColor = (state == 1) ? "darkgray" : "lightgray";
+  document.getElementById("predict").style.backgroundColor = (state == 2) ? "darkgray" : "lightgray";
+  if (state == 2){
+    continues.Clear();
+    var data = getData();
+    sine_loop(data[0], data[1]);
+  }
+}
+
+</script>
+</body>
+</html>
