@@ -3,7 +3,8 @@
 <style>
   .text_input {
     position: absolute;
-    left: 50%;
+    left: 200px;
+    width: 193px;
     font-family: monospace;
     border: 2px solid gray;
   }
@@ -29,12 +30,12 @@
     wavelength range <input id="input_4" class="text_input" type="text" value="60"><br>
     future steps <input id="input_5" class="text_input" type="text" value="1"><br>
     batch size <input id="input_6" class="text_input" type="text" value="10"><br>
+    noise amplitude <input id="input_7" class="text_input" type="text" value="0.2"><br>
     <button id="train" class="button_input" onclick="train_click()" style="background-color:lightgray">train</button>
     <button id="predict" class="button_input" onclick="predict_click()" style="background-color:lightgray">predict wave</button>
     <p id="hyper_information"></p>
     <button class="button_input" style="position:absolute;bottom:0px;right:0px" onclick="apply_settings1()">apply settings</button>
   </div>
-  <script src="neuralnet.js"></script>
   <script src="neuronnet.js"></script>
 <script>
 var canvas = document.getElementById("map");
@@ -209,13 +210,13 @@ class Item {
 }
 
 class Wave {
-  constructor(x, freq){
+  constructor(x, angular_frequency){
     this.x = x;
-    this.freq = freq;
+    this.angular_frequency = angular_frequency;
   }
 
   next(){
-    return 0.5 * Math.sin((this.x++) * this.freq);
+    return 0.5 * Math.sin((this.x++) * this.angular_frequency);
   }
 }
 
@@ -248,6 +249,7 @@ var learning_rate = -0.01;
 var wavelength_range = [60, 60];
 var num_future_steps = 1;
 var batchSize = 10;
+var noise_amplitude = 0.2;
 var child = new NeuronModel(subpoints);
 child.addLayer(10, "tanh");
 child.addLayer(10, "tanh");
@@ -259,10 +261,10 @@ child.draw(ctx2, 0, 0, 400, 300);
 function getData(dim = subpoints){
   var waveLength = Math.range(wavelength_range[0], wavelength_range[1]);
   var x = Math.random() * waveLength;
-  var freq = 2 * Math.PI / waveLength;
+  var angular_frequency = 2 * Math.PI / waveLength;
   var input = [];
-  for (var i = 0; i < dim; i++) input.push(0.5 * Math.sin((x++) * freq) + Math.range(-0.2, 0.2));
-  return [input, new Wave(x, freq)];
+  for (var i = 0; i < dim; i++) input.push(0.5 * Math.sin((x++) * angular_frequency) + Math.range(-noise_amplitude, noise_amplitude));
+  return [input, new Wave(x, angular_frequency)];
 }
 
 var lastDrawn;
@@ -340,8 +342,9 @@ function apply_settings1(){
   wavelength_range = Read.accept(document.getElementById("input_4").value, "Range");
   num_future_steps = Read.accept(document.getElementById("input_5").value, "Number");
   batchSize = Read.accept(document.getElementById("input_6").value, "Number");
+  noise_amplitude = Read.accept(document.getElementById("input_7").value, "Number");
   is_properly_setup = false;
-  if (learning_rate == null || wavelength_range == null || num_future_steps == null){
+  if (learning_rate == null || wavelength_range == null || num_future_steps == null || batchSize == null || noise_amplitude == null){
     alert("syntax error");
     return;
   }
