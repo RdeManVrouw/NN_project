@@ -213,6 +213,7 @@ class Wave {
   constructor(x, angular_frequency){
     this.x = x;
     this.angular_frequency = angular_frequency;
+    this.waveLength = 2 * Math.PI / angular_frequency;
   }
 
   next(){
@@ -292,6 +293,7 @@ function loop(){
   child.draw(ctx2, 0, 0, 400, 300);
   if (state == 1) setTimeout(function () { loop(); }, 10);
 }
+var lastMaximum = 0;
 function sine_loop(data, wave){
   if (state != 2) return;
   child.predict(data);
@@ -299,6 +301,10 @@ function sine_loop(data, wave){
   data.push(prediction);
   data.shift();
   continues.Push([prediction, wave.next()]);
+  if (data[data.length - 1] < data[data.length - 2] && data[data.length - 2] > data[data.length - 3]){
+    document.getElementById("hyper_information").innerHTML = "wavelength: " + (wave.x - lastMaximum) + " (" + wave.waveLength + ")";
+    lastMaximum = wave.x;
+  }
   continues.draw(ctx);
   lastDrawn = 1;
   child.draw(ctx2, 0, 0, 400, 300);
