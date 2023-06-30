@@ -19,6 +19,9 @@ Math.sigmoid = function (x){
 Math.relu = function (x){
   return (x < 0) ? 0.0 : x;
 }
+Math.capped_relu = function (x){
+  return (x < 0) ? 0.0 : Math.min(x, 1);
+}
 Math.leaky_relu = function (x){
   return (x < 0) ? 0.1 * x : x;
 }
@@ -35,6 +38,9 @@ Math.diff_sigmoid = function (x){
 }
 Math.diff_relu = function (x){
   return (x < 0) ? 0.0 : 1.0;
+}
+Math.diff_capped_relu = function (x){
+  return (x > 0 && x < 1) ? 1 : 0;
 }
 Math.diff_leaky_relu = function (x){
   return (x < 0) ? 0.1 : 1.0;
@@ -127,6 +133,15 @@ class NeuronModel {
     return sum;
   }
 
+  static weightToColor(w){
+    w = Math.sigmoid(w);
+    if (w > 0.5){
+      return "rgb(0," + (370*w - 115) + ",0)"
+    } else {
+      return "rgb(" + (255 - 370*w) + ",0,0)"
+    }
+  }
+
   draw(context, x, y, w, h){
     context.beginPath();
     context.fillStyle = "black";
@@ -147,7 +162,7 @@ class NeuronModel {
       for (var i = 0; i < this.layers[l].neurons.length; i++){
         for (var j = 0; j < this.layers[l].neurons[i].children.length; j++){
           context.beginPath();
-          context.strokeStyle = Neuralnet.weightToColor(this.layers[l].neurons[i].weights[j]);
+          context.strokeStyle = NeuronModel.weightToColor(this.layers[l].neurons[i].weights[j]);
           context.moveTo(layer_x_j, y + (j + 1) * step_y_j);
           context.lineTo(layer_x_i, y + (i + 1) * step_y_i);
           context.closePath();
@@ -347,5 +362,231 @@ class InputNeuron {
 class Int {
   constructor(i = 0){
     this.i = i;
+  }
+}
+class Dataplotter {
+  constructor(x = 20, y = 20, wid = 400, hig = 200, color = "red"){
+    this.x = new Vector2(x, y);
+    this.pxlW = wid - 20;
+    this.pxlH = hig - 20;
+    this.color = color;
+    this.data = [];
+    this.Xstep = 1;
+    this.cycle = 0;
+    this.Xmin = 0;
+    this.Xmax = 0;
+    this.Ymin = 0;
+    this.Ymax = 0.00000000001;
+    this.lastDataPoint = 0;
+  }
+
+  Push(y){
+    this.lastDataPoint = y;
+    if (y > this.Ymax) this.Ymax = y;
+    if (y < this.Ymin) this.Ymin = y;
+    if ((++this.cycle) != this.Xstep) return;
+    this.cycle = 0;
+    this.data.push(y);
+    if (this.data.length == 512){
+      var temp = [];
+      for (var i = 0; i < this.data.length; i += 2) temp.push(this.data[i]);
+      this.data = temp.slice();
+      this.Xstep *= 2;
+    }
+    this.Xmax += this.Xstep;
+  }
+
+  draw(context){
+    context.lineWidth = 1;
+    context.beginPath();
+    context.fillStyle = "white";
+    context.strokeStyle = "black";
+    context.rect(this.x.x, this.x.y, this.pxlW + 20, this.pxlH + 20);
+    context.fill();
+    context.stroke();
+    context.closePath();
+    context.beginPath();
+    context.fillStyle = "lightgray";
+    context.rect(this.x.x + 10, this.x.y + 10, this.pxlW, this.pxlH);
+    context.fill();
+    context.closePath();
+    context.beginPath();
+    context.strokeStyle = this.color;
+    context.moveTo(-this.Xmin / (this.Xmax - this.Xmin) * this.pxlW + this.x.x + 10, (this.data[0] - this.Ymax) / (this.Ymin - this.Ymax) * this.pxlH + this.x.y + 10);
+    for (var i = 1; i < this.data.length; i++) context.lineTo((i * this.Xstep - this.Xmin) / (this.Xmax - this.Xmin) * this.pxlW + this.x.x + 10, (this.data[i] - this.Ymax) / (this.Ymin - this.Ymax) * this.pxlH + this.x.y + 10);
+    context.lineTo((i * this.Xstep + this.cycle - this.Xmin) / (this.Xmax - this.Xmin) * this.pxlW + this.x.x + 10, (this.lastDataPoint - this.Ymax) / (this.Ymin - this.Ymax) * this.pxlH + this.x.y + 10);
+    context.moveTo(0, 0);
+    context.closePath();
+    context.stroke();
+    context.fillStyle = "black";
+    context.textAlign = "center";
+    context.font = "10px Arial";
+    context.fillText(this.Ymax, this.x.x + this.pxlW * 0.5, this.x.y + 9);
+    context.fillText(this.Ymin, this.x.x + this.pxlW * 0.5, this.x.y + this.pxlH + 18);
+  }
+
+  Clear(){
+    this.data = [];
+    this.Xstep = 1;
+    this.cycle = 0;
+    this.Xmin = 0;
+    this.Xmax = 0;
+    this.Ymin = 0;
+    this.Ymax = 0.00000000001;
+    this.lastDataPoint = 0;
+  }
+}
+class ContinuesDataPlotter {
+  constructor(dim, x = 20, y = 20, wid = 400, hig = 200, color = "red"){
+    this.x = new Vector2(x, y);
+    this.pxlW = wid - 20;
+    this.pxlH = hig - 20;
+    this.Ymin = -0.00001;
+    this.Ymax = 0.00001;
+    this.max_dim = dim;
+    this.data = [];
+    this.Xstep = this.pxlW / (dim - 1);
+    this.color = color;
+  }
+
+  Push(y){
+    this.data.push(y);
+    if (y > this.Ymax) this.Ymax = y;
+    if (y < this.Ymin) this.Ymin = y;
+    if (this.data.length == this.max_dim) this.data.shift();
+  }
+
+  draw(ctx){
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.fillStyle = "white";
+    ctx.strokeStyle = "black";
+    ctx.rect(this.x.x, this.x.y, this.pxlW + 20, this.pxlH + 20);
+    ctx.fill();
+    ctx.stroke();
+    ctx.closePath();
+    ctx.beginPath();
+    ctx.fillStyle = "lightgray";
+    ctx.rect(this.x.x + 10, this.x.y + 10, this.pxlW, this.pxlH);
+    ctx.fill();
+    ctx.closePath();
+    ctx.beginPath();
+    ctx.strokeStyle = this.color;
+    ctx.moveTo(this.x.x + 10, (this.data[0] - this.Ymax) / (this.Ymin - this.Ymax) * this.pxlH + this.x.y + 10);
+    for (var i = 1; i < this.data.length; i++) ctx.lineTo(i * this.Xstep + this.x.x + 10, (this.data[i] - this.Ymax) / (this.Ymin - this.Ymax) * this.pxlH + this.x.y + 10);
+    ctx.moveTo(0, 0);
+    ctx.closePath();
+    ctx.stroke();
+    ctx.fillStyle = "black";
+    ctx.textAlign = "center";
+    ctx.font = "10px Arial";
+    ctx.fillText(this.Ymax, this.x.x + this.pxlW * 0.5, this.x.y + 9);
+    ctx.fillText(this.Ymin, this.x.x + this.pxlW * 0.5, this.x.y + this.pxlH + 18);
+  }
+
+  Clear(){
+    this.data = [];
+    this.Ymin = -0.00001;
+    this.Ymax = 0.00001;
+  }
+}
+class MultyContinuesDataPlotter {
+  constructor(num_curves, dim, x = 20, y = 20, wid = 400, hig = 200, color = ["red"]){
+    this.x = new Vector2(x, y);
+    this.pxlW = wid - 20;
+    this.pxlH = hig - 20;
+    this.Ymin = -0.00001;
+    this.Ymax = 0.00001;
+    this.max_dim = dim;
+    this.data = [];
+    this.num_curves = num_curves;
+    this.Xstep = this.pxlW / (dim - 1);
+    this.color = color;
+    while (this.color.length < num_curves) this.color.push("red");
+  }
+
+  Push(y){
+    if (y.length != this.num_curves) return;
+    this.data.push(y);
+    for (var i = 0; i < this.num_curves; i++){
+      if (y[i] > this.Ymax) this.Ymax = y[i];
+      if (y[i] < this.Ymin) this.Ymin = y[i];
+    }
+    if (this.data.length == this.max_dim) this.data.shift();
+  }
+
+  draw(ctx){
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.fillStyle = "white";
+    ctx.strokeStyle = "black";
+    ctx.rect(this.x.x, this.x.y, this.pxlW + 20, this.pxlH + 20);
+    ctx.fill();
+    ctx.stroke();
+    ctx.closePath();
+    ctx.beginPath();
+    ctx.fillStyle = "lightgray";
+    ctx.rect(this.x.x + 10, this.x.y + 10, this.pxlW, this.pxlH);
+    ctx.fill();
+    ctx.closePath();
+    for (var d = 0; d < this.num_curves; d++){
+      ctx.beginPath();
+      ctx.strokeStyle = this.color[d];
+      ctx.moveTo(this.x.x + 10, (this.data[0][d] - this.Ymax) / (this.Ymin - this.Ymax) * this.pxlH + this.x.y + 10);
+      for (var i = 1; i < this.data.length; i++) ctx.lineTo(i * this.Xstep + this.x.x + 10, (this.data[i][d] - this.Ymax) / (this.Ymin - this.Ymax) * this.pxlH + this.x.y + 10);
+      ctx.moveTo(0, 0);
+      ctx.closePath();
+      ctx.stroke();
+    }
+    ctx.fillStyle = "black";
+    ctx.textAlign = "center";
+    ctx.font = "10px Arial";
+    ctx.fillText(this.Ymax, this.x.x + this.pxlW * 0.5, this.x.y + 9);
+    ctx.fillText(this.Ymin, this.x.x + this.pxlW * 0.5, this.x.y + this.pxlH + 18);
+  }
+
+  Clear(){
+    this.data = [];
+    this.Ymin = -0.00001;
+    this.Ymax = 0.00001;
+  }
+}
+class Vector2 {
+  constructor(x, y){
+    this.x = x;
+    this.y = y;
+  }
+  Multpl(x){
+    return new Vector2(this.x * x, this.y * x);
+  }
+  Add(v){
+    return new Vector2(this.x + v.x, this.y + v.y);
+  }
+  Sub(v){
+    return new Vector2(this.x - v.x, this.y - v.y);
+  }
+  Dist(v){
+    return Math.hypot(this.x - v.x, this.y - v.y);
+  }
+  Dot(v){
+    return this.x * v.x + this.y * v.y;
+  }
+  Crs(v){
+    return this.x * v.y - this.y * v.x;
+  }
+  rotate(phi){
+    return new Vector2(this.x * Math.cos(phi) - this.y * Math.sin(phi), this.x * Math.sin(phi) + this.y * Math.cos(phi));
+  }
+  static Angle(phi){
+    return new Vector2(Math.cos(phi), Math.sin(phi));
+  }
+  get magnitude(){
+    return Math.hypot(this.x, this.y);
+  }
+  get normalized(){
+    return this.Multpl(1/this.magnitude);
+  }
+  static get zero(){
+    return new Vector2(0, 0);
   }
 }
