@@ -1,14 +1,3 @@
-Math.argmax = function (array){
-  if (array.length == 0) return undefined;
-  var index = 0, max = array[0];
-  for (var i = 1; i < array.length; i++){
-    if (array[i] > max){
-      index = i;
-      max = array[i];
-    }
-  }
-  return index;
-}
 Math.sq = function (x){
   return x * x;
 }
