@@ -11,24 +11,19 @@ class Wave {
 }
 
 function exportDataFile(waveLengths = [20, 30, 40, 50], pointsPerWave = 60, wavesPerWaveLength, fileName = "training"){
-  var training_data_text = "";
-  var training_labels_text = "";
+  var training_data_text = "wave length;phase;";
+  for (var i = 0; i < pointsPerWave; i++) training_data_text += i + ((i == pointsPerWave - 1) ? "\n" : ";");
   var training_waves = [];
   for (var i = 0; i < waveLengths.length; i++){
     for (var j = 0; j < wavesPerWaveLength; j++){
-      training_data_text += waveLengths[i] + ";";
-      training_waves.push(new Wave(Math.random() * waveLengths[i], 2 * Math.PI / waveLengths[i]));
-      training_labels_text += training_waves[training_waves.length - 1].x + ";";
+      let wave = new Wave(Math.random() * waveLengths[i], 2 * Math.PI / waveLengths[i]);
+      training_data_text += waveLengths[i] + ";" + wave.x + ";";
+      for (var k = 0; k < pointsPerWave; k++){
+        training_data_text += (wave.next() + 0.4 * (Math.random() - 0.5)) + ((k == pointsPerWave - 1) ? "\n" : ";");
+      }
     }
   }
-  training_data_text = training_data_text.slice(0, -1) + "\n" + training_labels_text.slice(0, -1) + "\n";
-  for (var i = 0; i < pointsPerWave; i++){
-    for (var j = 0; j < training_waves.length; j++){
-      training_data_text += (training_waves[j].next() + 0.4 * (Math.random() - 0.5)) + ";";
-    }
-      training_data_text = training_data_text.slice(0, -1) + "\n";
-  }
-  exportAsCSV(training_data_text, fileName + "_data");
+  exportAsCSV(training_data_text, fileName + "_data_transposed");
 }
 exportDataFile([20, 30, 40, 50], 60, 2000, "training");
 exportDataFile([20, 30, 40, 50], 60, 500, "test");
