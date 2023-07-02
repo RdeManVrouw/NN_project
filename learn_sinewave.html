@@ -13,8 +13,8 @@
   }
 </style>
 <body>
-  <canvas id="map" style="position:absolute;left:10px;top:10px" width="400" height="200" onclick="exportAsPNG(false, 'plot')"></canvas>
-  <canvas id="map2" style="position:absolute;left:10px;top:220px" width="400" height="300" onclick="exportAsPNG(true, 'neuralnet')"></canvas>
+  <canvas id="map" style="position:absolute;left:10px;top:10px" width="400" height="200" onclick="exportDataplotCNV()"></canvas>
+  <canvas id="map2" style="position:absolute;left:10px;top:220px" width="400" height="300"></canvas>
   <div style="position:absolute;left:420px;top:10px;width:400px;height:140px;background-color:lightgray" spellcheck="false">
     window size/num. inputs <input id="input_0" class="text_input" type="text" value="18"><br>
     hidden layers <input id="input_1" class="text_input" type="text" value="10, 10"><br>
@@ -37,6 +37,7 @@
     <button class="button_input" style="position:absolute;bottom:0px;right:0px" onclick="apply_settings1()">apply settings</button>
   </div>
   <script src="neuronnet.js"></script>
+  <script src="linear_regression.js"></script>
 <script>
 // #######################################################################################
 // The code in the first part of this script  is used for graphical interface and importing the dataset.
@@ -364,6 +365,32 @@ function exportAsPNG(isNN, fileName){
   img.click();
   document.body.removeChild(canv);
 }
+function exportDataplotCNV(){
+  var text = "";
+  if (lastDrawn == 0){
+    for (var i = 0; i < dataplot.data.length; i++) text += dataplot.data[i] + ((i == dataplot.data.length - 1) ? "\n" : ";");
+  } else {
+    for (var i = 0; i < continues.num_curves; i++){
+      for (var j = 0; j < continues.data.length; j++) text += continues.data[j][i] + ((j == continues.data.length - 1) ? "\n" : ";");
+    }
+  }
+  exportAsCSV(text, "plot");
+}
+function exportAsCSV(text, filename = "test"){
+  let textFileAsBlob = new Blob([text], { type: "text/plain" });
+  let downloadLink = document.createElement('a');
+  downloadLink.download = filename + ".csv";
+  downloadLink.innerHTML = 'Download File';
+
+  if (window.webkitURL != null) {
+    downloadLink.href = window.webkitURL.createObjectURL(textFileAsBlob);
+  } else {
+    downloadLink.href = window.URL.createObjectURL(textFileAsBlob);
+    downloadLink.style.display = 'none';
+    document.body.appendChild(downloadLink);
+  }
+  downloadLink.click();
+}
 document.getElementById("import_NN").addEventListener('change', function() {
   let files = this.files;
   function readFile(index){
@@ -544,7 +571,7 @@ function evaluate_model(){
       wave.Reset();
     }
   }
-  document.getElementById("mean_squared_error").innerHTML = cost / counter;
+  document.getElementById("mean_squared_error").innerHTML = Math.sqrt(cost / counter);
 }
 
 </script>
