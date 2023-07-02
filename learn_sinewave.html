@@ -405,7 +405,7 @@ document.getElementById("import_NN").addEventListener('change', function() {
         processed_data[i] = [new Wave(temp[1] * 1, temp[0] * 1), []];
         for (var j = 2; j < temp.length; j++) processed_data[i][1].push(temp[j] * 1);
       }
-      if (files[index].name == "training_data_transposed.csv"){
+      if (files[index].name.includes("training")){
         training_data = {};
         for (var i = 0; i < waveLengthOptions.length; i++) training_data[waveLengthOptions[i]] = [];
         for (var i = 0; i < processed_data.length; i++) training_data[processed_data[i][0].waveLength].push(processed_data[i]);
