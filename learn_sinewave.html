@@ -369,22 +369,16 @@ document.getElementById("import_NN").addEventListener('change', function() {
   function readFile(index){
     let fr = new FileReader();
     fr.onload = function (e) {
-      let processed_data = [];
       let data = e.target.result.split('\n');
       data.pop();
-      let waveLengths = data[0].split(';');
-      let phases = data[1].split(';');
-      for (var i = 0; i < waveLengths.length; i++){
-        if (!waveLengthOptions.includes(waveLengths[i] * 1)) waveLengthOptions.push(waveLengths[i] * 1);
-        processed_data[i] = [new Wave(phases[i] * 1, waveLengths[i] * 1), []];
+      let processed_data = [];
+      for (var i = 0; i < data.length - 1; i++){
+        let temp = data[i + 1].split(";");
+        if (!waveLengthOptions.includes(temp[0] * 1)) waveLengthOptions.push(temp[0] * 1);
+        processed_data[i] = [new Wave(temp[1] * 1, temp[0] * 1), []];
+        for (var j = 2; j < temp.length; j++) processed_data[i][1].push(temp[j] * 1);
       }
-      for (var i = 2; i < data.length; i++){
-        let temp = data[i].split(';');
-        for (var j = 0; j < processed_data.length; j++){
-          processed_data[j][1].push(temp[j] * 1);
-        }
-      }
-      if (files[index].name == "training_data.csv"){
+      if (files[index].name == "training_data_transposed.csv"){
         training_data = {};
         for (var i = 0; i < waveLengthOptions.length; i++) training_data[waveLengthOptions[i]] = [];
         for (var i = 0; i < processed_data.length; i++) training_data[processed_data[i][0].waveLength].push(processed_data[i]);
@@ -449,9 +443,9 @@ function predict_click(){
   if (state == 2){
     continues.Clear();
     var data = training_data[checked_waveLengths.selectRandom()].selectRandom();
+    let samples = data[1].slice(0, subpoints);
     var wave = data[0];
-    wave.x += data[1].length;
-    let samples = data[1].slice();
+    wave.x += samples.length;
     sine_loop(samples, wave);
   }
 }
@@ -484,9 +478,9 @@ function loop(){
     var cost = 0;
     for (var batch = 0; batch < batchSize; batch++){
       var data = training_data[checked_waveLengths.selectRandom()].selectRandom(); // a random data vector and corresponding sine wave is selected
+      let samples = data[1].slice(0, subpoints);
       var wave = data[0];
-      wave.x += data[1].length;
-      let samples = data[1].slice();
+      wave.x += samples.length;
       for (var i = 0; i < num_future_steps; i++){
         cost += model.Evaluate(samples, [wave.next()], alpha);
         samples.push(model.output()[0]); // every time after evaluating, the samples are shifted
@@ -505,7 +499,7 @@ function loop(){
 }
 var lastMaximum = 0;
 
-// The predicted sine wave and is't corresponding are plotted over time.
+// The predicted sine wave and it's corresponding target sine wave are plotted over time.
 // The wave length of the predicted sine wave is calculated by counting how many steps elapse between each maximum in the graph
 function sine_loop(data, wave){
   if (state != 2) return;
@@ -536,9 +530,9 @@ function evaluate_model(){
   for (var i = 0; i < checked_waveLengths.length; i++){
     let data = test_data[checked_waveLengths[i]];
     for (var j = 0; j < data.length; j++){
+      let samples = data[j][1].slice(0, subpoints);
       var wave = data[j][0];
-      wave.x += data[j][1].length;
-      let samples = data[j][1].slice();
+      wave.x += samples.length;
       for (var k = 0; k < steps; k++){
         model.predict(samples);
         var prediction = model.output()[0];
