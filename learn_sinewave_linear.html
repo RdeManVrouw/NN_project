@@ -1,0 +1,422 @@
+<!DOCTYPE html>
+<html>
+<style>
+  .text_input {
+    position: absolute;
+    left: 200px;
+    width: 193px;
+    font-family: monospace;
+    border: 2px solid gray;
+  }
+  .button_input {
+    font-family: monospace;
+  }
+</style>
+<body>
+  <canvas id="map" style="position:absolute;left:10px;top:10px" width="400" height="200" onclick="exportDataplotCNV()"></canvas>
+  <div style="position:absolute;left:420px;top:160px;width:400px;height:360px;background-color:lightgray">
+    <input id="import_NN" type="file" style="background-color:gray" multiple><br>
+    <div id="input_4">wavelength: </div>
+    window size <input id="input_0" class="text_input" type="text" value="18"><br>
+    <button id="train" class="button_input" onclick="train_click()">train</button>
+    <button id="predict" class="button_input" onclick="predict_click()">predict wave</button><br>
+    <p id="hyper_information"></p>
+    future steps (evaluation) <input id="input_1" class="text_input" type="text" value="50"><br>
+    <p id="mean_squared_error"></p>
+    <button onclick="evaluate_model()">evaluate model on test_data</button>
+    <button class="button_input" style="position:absolute;bottom:0px;right:0px" onclick="apply_settings1()">apply settings</button>
+  </div>
+  <script src="neuronnet.js"></script>
+  <script src="linear_regression.js"></script>
+<script>
+var canvas = document.getElementById("map");
+var ctx = canvas.getContext("2d");
+
+Math.range = function (a, b){
+  return a + Math.random() * (b - a);
+}
+Array.prototype.selectRandom = function (){
+  return this[Math.floor(Math.random() * this.length)];
+}
+// The classes 'Read' and 'Item' are used to the value of text-input elements.
+class Read {
+  static accept(str, f){
+    var item = new Item(), index = new Item();
+    if (Read["accept" + f](str, index, item) && index.i == str.length) return item.i;
+    return null;
+  }
+
+  static acceptNatural(str, index){
+    if (str.charCodeAt(index.i) >= 49 && str.charCodeAt(index.i) <= 57){
+      index.i++;
+      return true;
+    }
+    return false;
+  }
+  static acceptZero(str, index){
+    if (str[index.i] == '0'){
+      index.i++;
+      return true;
+    }
+    return false;
+  }
+  static acceptDigit(str, index){
+    return Read.acceptZero(str, index) || Read.acceptNatural(str, index);
+  }
+  static acceptInteger(str, index, item){
+    var sign = 1;
+    if (str[index.i] == '-'){
+      sign = -1;
+      index.i++;
+    }
+    if (Read.acceptNatural(str, index)){
+      var sum = str.charCodeAt(index.i - 1) - 48;
+      while (Read.acceptDigit(str, index)){
+        sum = 10 * sum + str.charCodeAt(index.i - 1) - 48;
+      }
+      item.i = sum * sign;
+      item.type = 2;
+      return true;
+    }
+    if (Read.acceptZero(str, index)){
+      item.i = 0;
+      item.type = 2;
+      return true;
+    }
+    if (sign == -1) index.i--;
+    return false;
+  }
+  static acceptFloat(str, index, item){
+    var temp = index.i;
+    var sign = 1;
+    if (str[index.i] == '-'){
+      sign = -1;
+      index.i++;
+    }
+    if (Read.acceptInteger(str, index, item) && str[index.i] == '.'){
+      index.i++;
+      var mult = 0.1;
+      while (Read.acceptDigit(str, index)){
+        item.i += mult * (str.charCodeAt(index.i - 1) - 48);
+        mult /= 10;
+      }
+      item.i *= sign;
+      return true;
+    }
+    index.i = temp;
+    return false;
+  }
+  static acceptNumber(str, index, item){
+    while (str[index.i] == ' ') index.i++;
+    return Read.acceptFloat(str, index, item) || Read.acceptInteger(str, index, item);
+  }
+
+  static acceptComma(str, index){
+    var temp = index.i;
+    while (str[index.i] == ' ') index.i++;
+    if (str[index.i] == ','){
+      index.i++;
+      return true;
+    }
+    index.i = temp;
+    return false;
+  }
+  static acceptString(str, index, item){
+    var temp = index.i;
+    while (str[index.i] == ' ') index.i++;
+    var start = index.i;
+    if ((str.charCodeAt(index.i) >= 97 && str.charCodeAt(index.i) <= 122) || str[index.i] == '_'){
+      while ((str.charCodeAt(index.i) >= 97 && str.charCodeAt(index.i) <= 122) || str[index.i] == '_'){
+        index.i++;
+        if (index.i == str.length) break;
+      }
+      item.i = str.substr(start, index.i - start);
+      return true;
+    }
+    index.i = temp;
+    return false;
+  }
+  static acceptStringArray(str, index, item){
+    var temp = index.i;
+    var string = new Item();
+    if (Read.acceptString(str, index, string)){
+      item.i = [string.i];
+      while (Read.acceptComma(str, index)){
+        if (Read.acceptString(str, index, string)){
+          item.i.push(string.i);
+        } else {
+          index.i = temp;
+          return false;
+        }
+      }
+      return true;
+    }
+    index.i = temp;
+    return false;
+  }
+  static acceptNumberArray(str, index, item){
+    var temp = index.i;
+    var number = new Item();
+    if (Read.acceptNumber(str, index, number)){
+      item.i = [number.i];
+      while (Read.acceptComma(str, index)){
+        if (Read.acceptNumber(str, index, number)){
+          item.i.push(number.i);
+        } else {
+          index.i = temp;
+          return false;
+        }
+      }
+      return true;
+    }
+    index.i = temp;
+    return false;
+  }
+
+  static acceptRange(str, index, item){
+    var temp = index.i;
+    if (Read.acceptNumber(str, index, item)){
+      item.i = [item.i, item.i];
+      return true;
+    }
+    while (str[index.i] == ' ') index.i++;
+    if (str[index.i] == '['){
+      index.i++;
+      if (Read.acceptNumberArray(str, index, item)){
+        while (str[index.i] == ' ') index.i++;
+        if (item.i.length == 2 && str[index.i] == ']'){
+          index.i++;
+          return true;
+        }
+      }
+      index.i = temp;
+      return false;
+    }
+    index.i = temp;
+    return false;
+  }
+}
+class Item {
+  constructor(i = 0){
+    this.i = i;
+  }
+}
+class Wave {
+  constructor(x, waveLength){
+    this.original_phase = x;
+    this.x = x;
+    this.angular_frequency = 2 * Math.PI / waveLength;
+    this.waveLength = waveLength;
+  }
+
+  Reset(){
+    this.x = this.original_phase;
+  }
+
+  next(){
+    return 0.5 * Math.sin((this.x++) * this.angular_frequency);
+  }
+}
+
+function Vector2ToPxl(v){
+  return new Vector2(Math.round((v.x - Xmin)/(Xmax - Xmin)*(canvas.width - 1)), Math.round((v.y - Ymax)/(Ymin - Ymax)*(canvas.height - 1)));
+}
+function Vector2FromPxl(x, y){
+  return new Vector2(x/(canvas.width-1)*(Xmax - Xmin)+Xmin, y/(canvas.height-1)*(Ymin - Ymax)+Ymax);
+}
+function circle(m, r, color = "black"){
+  ctx.beginPath();
+  ctx.fillStyle = color;
+  ctx.arc(Math.round((m.x - Xmin)/(Xmax - Xmin)*(canvas.width - 1)), Math.round((m.y - Ymax)/(Ymin - Ymax)*(canvas.height - 1)), r / (Xmax - Xmin) * canvas.width, 0, 2 * Math.PI);
+  ctx.fill();
+}
+
+var applied = [];
+for (var i = 0; i < document.getElementsByClassName("text_input").length; i++){
+  applied[i] = true;
+  document.getElementById("input_" + i).addEventListener("input", function () {
+    var index = this.id.substring(6) * 1;
+    applied[index] = false;
+    this.style.color = "red";
+  });
+}
+
+function apply_settings1(){
+  subpoints = Read.accept(document.getElementById("input_0").value, "Number");
+  checked_waveLengths = [];
+  for (var i = 0; i < document.getElementById("input_4").children.length; i++){
+    if (document.getElementById("input_4").children[i].children[0].checked) checked_waveLengths.push(document.getElementById("input_4").children[i].children[0].name * 1);
+  }
+  if (subpoints == null){
+    alert("syntax error");
+    return;
+  }
+  model = new LinearModel(subpoints, 1);
+  continues.Clear();
+  for (var i = 0; i < applied.length; i++){
+    applied[i] = true;
+    document.getElementById("input_" + i).style.color = "black";
+  }
+}
+
+// the functions 'exportAsTXT', 'exportAsPNG', and the eventlistener are meant for exporting and importing data
+function exportAsTXT(text, filename = "test"){
+  let textFileAsBlob = new Blob([text], { type: "text/plain" });
+  let downloadLink = document.createElement('a');
+  downloadLink.download = filename + ".txt";
+  downloadLink.innerHTML = 'Download File';
+
+  if (window.webkitURL != null) {
+    downloadLink.href = window.webkitURL.createObjectURL(textFileAsBlob);
+  } else {
+    downloadLink.href = window.URL.createObjectURL(textFileAsBlob);
+    downloadLink.style.display = 'none';
+    document.body.appendChild(downloadLink);
+  }
+  downloadLink.click();
+}
+let training_data, test_data, waveLengthOptions = [];
+function exportDataplotCNV(){
+  var text = "";
+  for (var i = 0; i < continues.num_curves; i++){
+    for (var j = 0; j < continues.data.length; j++) text += continues.data[j][i] + ((j == continues.data.length - 1) ? "\n" : ";");
+  }
+  exportAsCSV(text, "plot");
+}
+function exportAsCSV(text, filename = "test"){
+  let textFileAsBlob = new Blob([text], { type: "text/plain" });
+  let downloadLink = document.createElement('a');
+  downloadLink.download = filename + ".csv";
+  downloadLink.innerHTML = 'Download File';
+
+  if (window.webkitURL != null) {
+    downloadLink.href = window.webkitURL.createObjectURL(textFileAsBlob);
+  } else {
+    downloadLink.href = window.URL.createObjectURL(textFileAsBlob);
+    downloadLink.style.display = 'none';
+    document.body.appendChild(downloadLink);
+  }
+  downloadLink.click();
+}
+document.getElementById("import_NN").addEventListener('change', function() {
+  let files = this.files;
+  function readFile(index){
+    let fr = new FileReader();
+    fr.onload = function (e) {
+      let data = e.target.result.split('\n');
+      data.pop();
+      let processed_data = [];
+      for (var i = 0; i < data.length - 1; i++){
+        let temp = data[i + 1].split(";");
+        if (!waveLengthOptions.includes(temp[0] * 1)) waveLengthOptions.push(temp[0] * 1);
+        processed_data[i] = [new Wave(temp[1] * 1, temp[0] * 1), []];
+        for (var j = 2; j < temp.length; j++) processed_data[i][1].push(temp[j] * 1);
+      }
+      if (files[index].name.includes("training")){
+        training_data = {};
+        for (var i = 0; i < waveLengthOptions.length; i++) training_data[waveLengthOptions[i]] = [];
+        for (var i = 0; i < processed_data.length; i++) training_data[processed_data[i][0].waveLength].push(processed_data[i]);
+      } else {
+        test_data = {};
+        for (var i = 0; i < waveLengthOptions.length; i++) test_data[waveLengthOptions[i]] = [];
+        for (var i = 0; i < processed_data.length; i++) test_data[processed_data[i][0].waveLength].push(processed_data[i]);
+      }
+      if (index + 1 < files.length) readFile(index + 1);
+      else createCheckboxes();
+    }
+    fr.readAsText(files[index]);
+  }
+  readFile(0);
+});
+function createCheckboxes(){
+  for (var i = 0; i < waveLengthOptions.length; i++){
+    var div = document.createElement("div");
+    var checkbox = document.createElement("input");
+    checkbox.type = "checkbox";
+    checkbox.name = waveLengthOptions[i];
+    div.appendChild(checkbox);
+    var label = document.createElement("label");
+    label.innerHTML = waveLengthOptions[i];
+    div.appendChild(label);
+    document.getElementById("input_4").appendChild(div);
+  }
+}
+
+function train_click(){
+  for (var i = 0; i < checked_waveLengths.length; i++){
+    for (var j = 0; j < training_data[checked_waveLengths[i]].length; j++){
+      var data = training_data[checked_waveLengths[i]][j];
+      let samples = data[1].slice(0, subpoints);
+      var wave = data[0];
+      wave.x += samples.length;
+      model.Evaluate(samples, [wave.next()])
+      wave.Reset();
+    }
+  }
+  model.fit();
+}
+var state = 0;
+function predict_click(){
+  state = (state == 1) ? 0 : 1;
+  if (state == 1){
+    continues.Clear();
+    var data = training_data[checked_waveLengths.selectRandom()].selectRandom();
+    let samples = data[1].slice(0, subpoints);
+    var wave = data[0];
+    wave.x += samples.length;
+    sine_loop(samples, wave);
+  }
+}
+
+var subpoints = 18;
+var learning_rate = -0.01;
+var num_future_steps = 1;
+var batchSize = 10;
+var checked_waveLengths = [];
+var continues = new MultyContinuesDataPlotter(2, 360, 0, 0, 400, 200, ["navy", "gray"]);
+var model = new LinearModel(subpoints, 1);
+
+var lastMaximum = 0;
+function sine_loop(data, wave){
+  if (state != 1) return;
+  var prediction = model.predict(data)[0];
+  data.push(prediction);
+  data.shift();
+  continues.Push([prediction, wave.next()]);
+  if (data[data.length - 1] < data[data.length - 2] && data[data.length - 2] > data[data.length - 3]){
+    document.getElementById("hyper_information").innerHTML = "wavelength: " + (wave.x - lastMaximum) + " (" + wave.waveLength + ")";
+    lastMaximum = wave.x;
+  }
+  continues.draw(ctx);
+  lastDrawn = 1;
+  if (state == 1) setTimeout(function () {
+    sine_loop(data, wave);
+  }, 10);
+  else wave.Reset();
+}
+
+function evaluate_model(){
+  let steps = document.getElementById("input_1").value * 1;
+  let cost = 0, counter = 0;
+  for (var i = 0; i < checked_waveLengths.length; i++){
+    let data = test_data[checked_waveLengths[i]];
+    for (var j = 0; j < data.length; j++){
+      let samples = data[j][1].slice(0, subpoints);
+      var wave = data[j][0];
+      wave.x += samples.length;
+      for (var k = 0; k < steps; k++){
+        var prediction = model.predict(samples)[0];
+        samples.push(prediction);
+        samples.shift();
+        cost += Math.sq(prediction - wave.next());
+        counter++;
+      }
+      wave.Reset();
+    }
+  }
+  document.getElementById("mean_squared_error").innerHTML = Math.sqrt(cost / counter);
+}
+
+</script>
+</body>
+</html>
