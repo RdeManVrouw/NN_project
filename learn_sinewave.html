@@ -9,7 +9,6 @@
     border: 2px solid gray;
   }
   .button_input {
-    background-color: lightgray;
     font-family: monospace;
   }
 </style>
@@ -20,24 +19,30 @@
     window size/num. inputs <input id="input_0" class="text_input" type="text" value="18"><br>
     hidden layers <input id="input_1" class="text_input" type="text" value="10, 10"><br>
     activation functions <input id="input_2" class="text_input" type="text" value="tanh, tanh, tanh"><br>
-    <button class="button_input" onclick="import_NN_click()">import NN</button><input id="import_NN" type="file" style="background-color:gray;visibility:hidden"><br>
-    <button class="button_input" onclick="export_NN_click()">export NN</button>
+    <input id="import_NN" type="file" style="background-color:gray" multiple><br>
     <p id="model_information">number of parameters: 311</p>
     <button class="button_input" style="position:absolute;bottom:0px;right:0px" onclick="apply_settings0()">apply settings</button>
   </div>
   <div style="position:absolute;left:420px;top:160px;width:400px;height:360px;background-color:lightgray">
     learning rate <input id="input_3" class="text_input" type="text" value="-0.01"><br>
-    wavelength range <input id="input_4" class="text_input" type="text" value="60"><br>
+    <div id="input_4">wavelength: </div>
     future steps <input id="input_5" class="text_input" type="text" value="1"><br>
     batch size <input id="input_6" class="text_input" type="text" value="10"><br>
-    noise amplitude <input id="input_7" class="text_input" type="text" value="0.2"><br>
-    <button id="train" class="button_input" onclick="train_click()" style="background-color:lightgray">train</button>
-    <button id="predict" class="button_input" onclick="predict_click()" style="background-color:lightgray">predict wave</button>
+    <button id="train" class="button_input" onclick="train_click()">train</button>
+    <button id="predict" class="button_input" onclick="predict_click()">predict wave</button>
     <p id="hyper_information"></p>
+    future steps (evaluation) <input id="input_7" class="text_input" type="text" value="50"><br>
+    <p id="mean_squared_error"></p>
+    <button onclick="evaluate_model()">evaluate model on test_data</button>
     <button class="button_input" style="position:absolute;bottom:0px;right:0px" onclick="apply_settings1()">apply settings</button>
   </div>
   <script src="neuronnet.js"></script>
 <script>
+// #######################################################################################
+// The code in the first part of this script  is used for graphical interface and importing the dataset.
+// It is not important for the workings and the training of the models.
+// #######################################################################################
+
 var canvas = document.getElementById("map");
 var ctx = canvas.getContext("2d");
 var canvas2 = document.getElementById("map2");
@@ -46,6 +51,10 @@ var ctx2 = canvas2.getContext("2d");
 Math.range = function (a, b){
   return a + Math.random() * (b - a);
 }
+Array.prototype.selectRandom = function (){
+  return this[Math.floor(Math.random() * this.length)];
+}
+// The classes 'Read' and 'Item' are used to the value of text-input elements.
 class Read {
   static accept(str, f){
     var item = new Item(), index = new Item();
@@ -208,12 +217,16 @@ class Item {
     this.i = i;
   }
 }
-
 class Wave {
-  constructor(x, angular_frequency){
+  constructor(x, waveLength){
+    this.original_phase = x;
     this.x = x;
-    this.angular_frequency = angular_frequency;
-    this.waveLength = 2 * Math.PI / angular_frequency;
+    this.angular_frequency = 2 * Math.PI / waveLength;
+    this.waveLength = waveLength;
+  }
+
+  Reset(){
+    this.x = this.original_phase;
   }
 
   next(){
@@ -245,74 +258,6 @@ for (var i = 0; i < document.getElementsByClassName("text_input").length; i++){
   });
 }
 
-var subpoints = 18;
-var learning_rate = -0.01;
-var wavelength_range = [60, 60];
-var num_future_steps = 1;
-var batchSize = 10;
-var noise_amplitude = 0.2;
-var child = new NeuronModel(subpoints);
-child.addLayer(10, "tanh");
-child.addLayer(10, "tanh");
-child.addLayer(1, "tanh");
-var dataplot = new Dataplotter(0, 0, 400, 200);
-var continues = new MultyContinuesDataPlotter(2, 360, 0, 0, 400, 200, ["navy", "gray"]);
-child.draw(ctx2, 0, 0, 400, 300);
-
-function getData(dim = subpoints){
-  var waveLength = Math.range(wavelength_range[0], wavelength_range[1]);
-  var x = Math.random() * waveLength;
-  var angular_frequency = 2 * Math.PI / waveLength;
-  var input = [];
-  for (var i = 0; i < dim; i++) input.push(0.5 * Math.sin((x++) * angular_frequency) + Math.range(-noise_amplitude, noise_amplitude));
-  return [input, new Wave(x, angular_frequency)];
-}
-
-var lastDrawn;
-function loop(){
-  if (state != 1) return;
-  let alpha = learning_rate / batchSize;
-  for (var generation = 0; generation < 10; generation++){
-    var cost = 0;
-    for (var batch = 0; batch < batchSize; batch++){
-      var data = getData(subpoints);
-      var wave = data[1];
-      data = data[0];
-      for (var i = 0; i < num_future_steps; i++){
-        cost += child.Evaluate(data, [wave.next()], alpha);
-        data.push(child.output()[0]);
-        data.shift();
-      }
-    }
-    child.learnFromYourMistakes();
-    dataplot.Push(cost / (batchSize * num_future_steps));
-  }
-  ctx.clearRect(0, 0, canvas.width, canvas.height);
-  dataplot.draw(ctx);
-  lastDrawn = 0;
-  child.draw(ctx2, 0, 0, 400, 300);
-  if (state == 1) setTimeout(function () { loop(); }, 10);
-}
-var lastMaximum = 0;
-function sine_loop(data, wave){
-  if (state != 2) return;
-  child.predict(data);
-  var prediction = child.output()[0];
-  data.push(prediction);
-  data.shift();
-  continues.Push([prediction, wave.next()]);
-  if (data[data.length - 1] < data[data.length - 2] && data[data.length - 2] > data[data.length - 3]){
-    document.getElementById("hyper_information").innerHTML = "wavelength: " + (wave.x - lastMaximum) + " (" + wave.waveLength + ")";
-    lastMaximum = wave.x;
-  }
-  continues.draw(ctx);
-  lastDrawn = 1;
-  child.draw(ctx2, 0, 0, 400, 300);
-  if (state == 2) setTimeout(function () {
-    sine_loop(data, wave);
-  }, 10);
-}
-
 function apply_settings0(){
   subpoints = Read.accept(document.getElementById("input_0").value, "Number");
   var layer_lengths = Read.accept(document.getElementById("input_1").value, "NumberArray");
@@ -328,16 +273,14 @@ function apply_settings0(){
     return;
   }
   is_properly_setup = true;
-  child = new NeuronModel(subpoints);
-  for (var i = 0; i < layer_lengths.length; i++) child.addLayer(layer_lengths[i], layer_functions[i]);
-  child.addLayer(1, layer_functions[layer_functions.length - 1]);
-  document.getElementById("model_information").innerHTML = "number of parameters: " + child.numParameters();
+  model = new NeuronModel(subpoints);
+  for (var i = 0; i < layer_lengths.length; i++) model.addLayer(layer_lengths[i], layer_functions[i]);
+  model.addLayer(1, layer_functions[layer_functions.length - 1]);
+  document.getElementById("model_information").innerHTML = "number of parameters: " + model.numParameters();
   dataplot.Clear();
   continues.Clear();
-  child.draw(ctx2, 0, 0, 400, 300);
+  model.draw(ctx2, 0, 0, 400, 300);
   state = 0;
-  document.getElementById("train").style.backgroundColor = "lightgray";
-  document.getElementById("predict").style.backgroundColor = "lightgray";
   for (var i = 0; i < 3; i++){
     applied[i] = true;
     document.getElementById("input_" + i).style.color = "black";
@@ -345,12 +288,14 @@ function apply_settings0(){
 }
 function apply_settings1(){
   learning_rate = Read.accept(document.getElementById("input_3").value, "Number");
-  wavelength_range = Read.accept(document.getElementById("input_4").value, "Range");
   num_future_steps = Read.accept(document.getElementById("input_5").value, "Number");
   batchSize = Read.accept(document.getElementById("input_6").value, "Number");
-  noise_amplitude = Read.accept(document.getElementById("input_7").value, "Number");
+  checked_waveLengths = [];
+  for (var i = 0; i < document.getElementById("input_4").children.length; i++){
+    if (document.getElementById("input_4").children[i].children[0].checked) checked_waveLengths.push(document.getElementById("input_4").children[i].children[0].name * 1);
+  }
   is_properly_setup = false;
-  if (learning_rate == null || wavelength_range == null || num_future_steps == null || batchSize == null || noise_amplitude == null){
+  if (learning_rate == null || num_future_steps == null || batchSize == null){
     alert("syntax error");
     return;
   }
@@ -358,14 +303,13 @@ function apply_settings1(){
   dataplot.Clear();
   continues.Clear();
   state = 0;
-  document.getElementById("train").style.backgroundColor = "lightgray";
-  document.getElementById("predict").style.backgroundColor = "lightgray";
   for (var i = 3; i < applied.length; i++){
     applied[i] = true;
     document.getElementById("input_" + i).style.color = "black";
   }
 }
 
+// the functions 'exportAsTXT', 'exportAsPNG', and the eventlistener are meant for exporting and importing data
 function exportAsTXT(text, filename = "test"){
   let textFileAsBlob = new Blob([text], { type: "text/plain" });
   let downloadLink = document.createElement('a');
@@ -381,6 +325,7 @@ function exportAsTXT(text, filename = "test"){
   }
   downloadLink.click();
 }
+let training_data, test_data, waveLengthOptions = [];
 function exportAsPNG(isNN, fileName){
   var canv = document.createElement("canvas");
   canv.width = 800;
@@ -392,7 +337,7 @@ function exportAsPNG(isNN, fileName){
   document.body.appendChild(canv);
   var context = canv.getContext("2d");
   if (isNN){
-    child.draw(context, 0, 0, 800, 600);
+    model.draw(context, 0, 0, 800, 600);
   } else {
     if (lastDrawn == 0){
       var temp = new Dataplotter(0, 0, 800, 400);
@@ -419,31 +364,57 @@ function exportAsPNG(isNN, fileName){
   img.click();
   document.body.removeChild(canv);
 }
-function import_NN_click(){
-  document.getElementById("import_NN").style.visibility = "visible";
-}
-function export_NN_click(){
-  exportAsTXT(child.writeText(), "NN_sinewave_model");
-}
 document.getElementById("import_NN").addEventListener('change', function() {
-  let fr = new FileReader();
-  fr.onload = function () {
-    child = NeuronModel.readText(fr.result);
-    document.getElementById("input_0").value = child.layer0.length;
-    var hidden = child.layers[0].neurons.length;
-    for (var i = 1; i < child.layers.length - 1; i++) hidden += ", " + child.layers[i].neurons.length;
-    document.getElementById("input_1").value = hidden;
-    var activation_functions = child.layers[0].activation_function;
-    for (var i = 1; i < child.layers.length; i++) activation_functions += ", " + child.layers[i].activation_function;
-    document.getElementById("input_2").value = activation_functions;
-    document.getElementById("model_information").innerHTML = "number of parameters: " + child.numParameters();
-    child.draw(ctx2, 0, 0, 400, 300);
-    document.getElementById("import_NN").style.visibility = "hidden";
-    document.getElementById("import_NN").value = '';
+  let files = this.files;
+  function readFile(index){
+    let fr = new FileReader();
+    fr.onload = function (e) {
+      let processed_data = [];
+      let data = e.target.result.split('\n');
+      data.pop();
+      let waveLengths = data[0].split(';');
+      let phases = data[1].split(';');
+      for (var i = 0; i < waveLengths.length; i++){
+        if (!waveLengthOptions.includes(waveLengths[i] * 1)) waveLengthOptions.push(waveLengths[i] * 1);
+        processed_data[i] = [new Wave(phases[i] * 1, waveLengths[i] * 1), []];
+      }
+      for (var i = 2; i < data.length; i++){
+        let temp = data[i].split(';');
+        for (var j = 0; j < processed_data.length; j++){
+          processed_data[j][1].push(temp[j] * 1);
+        }
+      }
+      if (files[index].name == "training_data.csv"){
+        training_data = {};
+        for (var i = 0; i < waveLengthOptions.length; i++) training_data[waveLengthOptions[i]] = [];
+        for (var i = 0; i < processed_data.length; i++) training_data[processed_data[i][0].waveLength].push(processed_data[i]);
+      } else {
+        test_data = {};
+        for (var i = 0; i < waveLengthOptions.length; i++) test_data[waveLengthOptions[i]] = [];
+        for (var i = 0; i < processed_data.length; i++) test_data[processed_data[i][0].waveLength].push(processed_data[i]);
+      }
+      if (index + 1 < files.length) readFile(index + 1);
+      else createCheckboxes();
+    }
+    fr.readAsText(files[index]);
   }
-  fr.readAsText(this.files[0]);
+  readFile(0);
 });
+function createCheckboxes(){
+  for (var i = 0; i < waveLengthOptions.length; i++){
+    var div = document.createElement("div");
+    var checkbox = document.createElement("input");
+    checkbox.type = "checkbox";
+    checkbox.name = waveLengthOptions[i];
+    div.appendChild(checkbox);
+    var label = document.createElement("label");
+    label.innerHTML = waveLengthOptions[i];
+    div.appendChild(label);
+    document.getElementById("input_4").appendChild(div);
+  }
+}
 
+// function used for graphics
 canvas.addEventListener("mousemove", function (e) {
   if (lastDrawn == 0 && e.pageX >= 20 && e.pageX <= 400 && e.pageY >= 20 && e.pageY <= 200){
     let index = Math.floor((e.pageX - 20) * (dataplot.Xmax - dataplot.Xmin) / (dataplot.pxlW * dataplot.Xstep) + dataplot.Xmin / dataplot.Xstep);
@@ -456,6 +427,7 @@ canvas.addEventListener("mousemove", function (e) {
     document.getElementById("hyper_information").innerHTML = "cost: " + value;
   }
 });
+// function used for graphics
 canvas.addEventListener("mouseleave", function () {
   if (lastDrawn == 0) dataplot.draw(ctx);
   document.getElementById("hyper_information").innerHTML = "";
@@ -476,9 +448,109 @@ function predict_click(){
   document.getElementById("predict").style.backgroundColor = (state == 2) ? "darkgray" : "lightgray";
   if (state == 2){
     continues.Clear();
-    var data = getData();
-    sine_loop(data[0], data[1]);
+    var data = training_data[checked_waveLengths.selectRandom()].selectRandom();
+    var wave = data[0];
+    wave.x += data[1].length;
+    let samples = data[1].slice();
+    sine_loop(samples, wave);
   }
+}
+
+// #################################################################################
+// This is a more substantial part of the code. The model in initialized (It can be changed by changing settins; these are just default settings)
+// The learning algorithm is excecuted in this part of the code. Classes that are not defined in this file
+// are defined in the 'neuronnet.js' file (classes like 'NeuronModel', 'Vector2', 'Dataplotter', 'MultyContinuesDataPlotter').
+// #################################################################################
+
+var subpoints = 18;
+var learning_rate = -0.01;
+var num_future_steps = 1;
+var batchSize = 10;
+var checked_waveLengths = [];
+var model = new NeuronModel(subpoints);
+model.addLayer(10, "tanh");
+model.addLayer(10, "tanh");
+model.addLayer(1, "tanh");
+var dataplot = new Dataplotter(0, 0, 400, 200);
+var continues = new MultyContinuesDataPlotter(2, 360, 0, 0, 400, 200, ["navy", "gray"]);
+model.draw(ctx2, 0, 0, 400, 300);
+
+var lastDrawn;
+// in this function, the model is trained on the training_data. The graph is updated every time step.
+function loop(){
+  if (state != 1) return;
+  let alpha = learning_rate / batchSize;
+  for (var generation = 0; generation < 10; generation++){
+    var cost = 0;
+    for (var batch = 0; batch < batchSize; batch++){
+      var data = training_data[checked_waveLengths.selectRandom()].selectRandom(); // a random data vector and corresponding sine wave is selected
+      var wave = data[0];
+      wave.x += data[1].length;
+      let samples = data[1].slice();
+      for (var i = 0; i < num_future_steps; i++){
+        cost += model.Evaluate(samples, [wave.next()], alpha);
+        samples.push(model.output()[0]); // every time after evaluating, the samples are shifted
+        samples.shift();
+      }
+      wave.Reset(); // the wave is reset to it's starting phase, to be used again later
+    }
+    model.learnFromYourMistakes(); // the parameters are updated
+    dataplot.Push(cost / (batchSize * num_future_steps));
+  }
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  dataplot.draw(ctx);
+  lastDrawn = 0;
+  model.draw(ctx2, 0, 0, 400, 300);
+  if (state == 1) setTimeout(function () { loop(); }, 10);
+}
+var lastMaximum = 0;
+
+// The predicted sine wave and is't corresponding are plotted over time.
+// The wave length of the predicted sine wave is calculated by counting how many steps elapse between each maximum in the graph
+function sine_loop(data, wave){
+  if (state != 2) return;
+  model.predict(data);
+  var prediction = model.output()[0];
+  data.push(prediction);
+  data.shift();
+  continues.Push([prediction, wave.next()]);
+  if (data[data.length - 1] < data[data.length - 2] && data[data.length - 2] > data[data.length - 3]){
+    document.getElementById("hyper_information").innerHTML = "wavelength: " + (wave.x - lastMaximum) + " (" + wave.waveLength + ")";
+    lastMaximum = wave.x;
+  }
+  continues.draw(ctx);
+  lastDrawn = 1;
+  model.draw(ctx2, 0, 0, 400, 300);
+  if (state == 2) setTimeout(function () {
+    sine_loop(data, wave);
+  }, 10);
+  else wave.Reset();
+}
+
+// The mean squered error is calculated and displayed
+// This mean is calculated by running the model on all test_data points of the selected wavelengths.
+// for as many future steps as are filled in in the input element 'future steps (evaluation)'.
+function evaluate_model(){
+  let steps = document.getElementById("input_7").value * 1;
+  let cost = 0, counter = 0;
+  for (var i = 0; i < checked_waveLengths.length; i++){
+    let data = test_data[checked_waveLengths[i]];
+    for (var j = 0; j < data.length; j++){
+      var wave = data[j][0];
+      wave.x += data[j][1].length;
+      let samples = data[j][1].slice();
+      for (var k = 0; k < steps; k++){
+        model.predict(samples);
+        var prediction = model.output()[0];
+        samples.push(prediction);
+        samples.shift();
+        cost += Math.sq(prediction - wave.next());
+        counter++;
+      }
+      wave.Reset();
+    }
+  }
+  document.getElementById("mean_squared_error").innerHTML = cost / counter;
 }
 
 </script>
