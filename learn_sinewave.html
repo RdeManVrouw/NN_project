@@ -37,7 +37,6 @@
     <button class="button_input" style="position:absolute;bottom:0px;right:0px" onclick="apply_settings1()">apply settings</button>
   </div>
   <script src="neuronnet.js"></script>
-  <script src="linear_regression.js"></script>
 <script>
 // #######################################################################################
 // The code in the first part of this script  is used for graphical interface and importing the dataset.
@@ -414,8 +413,12 @@ document.getElementById("import_NN").addEventListener('change', function() {
         for (var i = 0; i < waveLengthOptions.length; i++) test_data[waveLengthOptions[i]] = [];
         for (var i = 0; i < processed_data.length; i++) test_data[processed_data[i][0].waveLength].push(processed_data[i]);
       }
-      if (index + 1 < files.length) readFile(index + 1);
-      else createCheckboxes();
+      if (index + 1 < files.length){
+        readFile(index + 1);
+      } else {
+        createCheckboxes();
+        //train_multi_frequencies_model();
+      }
     }
     fr.readAsText(files[index]);
   }
@@ -572,6 +575,51 @@ function evaluate_model(){
     }
   }
   document.getElementById("mean_squared_error").innerHTML = Math.sqrt(cost / counter);
+}
+
+// Used for training a model on predicting sine waves with any frequency. Outputs the results in the console when it's done.
+function train_multi_frequencies_model(){
+  let windowL = 60;
+  let model2 = new NeuronModel(windowL);
+  model2.addLayer(80);
+  model2.addLayer(80);
+  model2.addLayer(80);
+  model2.addLayer(3, "identity");
+  for (var gen = 0; gen < 20000; gen++){
+    let cost = 0;
+    let batch;
+    for (batch = 0; batch < 20; batch++){
+      var data = training_data[[20, 30, 40, 50].selectRandom()].selectRandom();
+      let samples = data[1].slice(0, windowL);
+      var wave = data[0];
+      cost += model2.Evaluate(samples, [wave.waveLength, Math.cos(wave.x * wave.angular_frequency), Math.sin(wave.x * wave.angular_frequency)], -0.0003);
+    }
+    if (gen % 100 == 0) console.log(cost / batch);
+    model2.learnFromYourMistakes();
+  }
+  console.log("################################");
+  for (var i = 0; i < 10; i++){
+    var data = training_data[[20, 30, 40, 50].selectRandom()].selectRandom();
+    model2.predict(data[1].slice(0, windowL));
+    let output = model2.output();
+    console.log("wavelength: " + data[0].waveLength + ", prediction: " + output[0]);
+    let phase = Math.atan2(output[2], output[1]) * data[0].waveLength / (2 * Math.PI);
+    if (phase < 0) phase += data[0].waveLength;
+    console.log("phase: " + data[0].x + ", prediction: " + phase);
+  }
+  console.log("################################");
+  let se = 0, counter = 0;
+  for (var i = 0; i < 4; i++){
+    let data = test_data[[20, 30, 40, 50][i]];
+    for (var j = 0; j < data.length; j++){
+      let samples = data[j][1].slice(0, windowL);
+      var wave = data[j][0];
+      model2.predict(data[j][1].slice(0, windowL));
+      se += Math.sq(model2.output()[0] - wave.waveLength) + Math.sq(model2.output()[1] - Math.cos(wave.x * wave.angular_frequency)) + Math.sq(model2.output()[2] - Math.sin(wave.x * wave.angular_frequency));
+      counter++;
+    }
+  }
+  console.log("RMSE: " + Math.sqrt(se / counter));
 }
 
 </script>
